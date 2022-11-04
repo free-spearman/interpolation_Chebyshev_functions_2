@@ -2,11 +2,13 @@
 #define MYGLWIDGET_H
 #include <QGLWidget>
 
+
 class MyGLWidget : public QGLWidget{
     Q_OBJECT
     int nx; // number of points by X
     int ny; //number of points by Y
     int k; //id of the approxiamted function
+    int nthreads;//number of threads
     double a; //left end by X
     double b; //right end by X
     double c; //left end by Y

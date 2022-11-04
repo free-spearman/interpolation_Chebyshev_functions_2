@@ -4,7 +4,8 @@
 #include "myglwidget.h"
 #include "help.hpp"
 #include "chebyshev.hpp"
-
+#include "auto_parallelization.hpp"
+#define ARGC 6 //старое 5
 MyGLWidget::MyGLWidget(QWidget *parent)
     : QGLWidget(QGLFormat(QGL::SampleBuffers), parent){
     xRot = 0;
@@ -25,7 +26,7 @@ MyGLWidget::~MyGLWidget(){
 int MyGLWidget::parse_command_line(){
     FILE *ff;
     QStringList args=QApplication::arguments();
-    if(args.size()!=5)
+    if(args.size()!= ARGC)
         return -3;
     ff=fopen(args.at(1).toLocal8Bit().constData(), "r");
     if(!ff)
@@ -53,13 +54,23 @@ int MyGLWidget::parse_command_line(){
         return -3;
     if(k<0 || k>7)
         return -2;
+    nthreads=args.at(5).toInt(&ok);
+    if(!ok)
+        return -3;
+    if(nthreads < 1)
+        return -2;
     allocate();
     chebyshevpoints(cx, cy, nx, ny, a, b, c, d);
-    fill_Fx(Fx, cx, nx, a, b);
-    fill_Fy(Fy, cy, ny, c, d);
+    if (nthreads > 1){
+        fill_Fx_Fy(Fx, cx, nx, a, b, Fy, cy, ny, c, d);
+    }
+    else {
+        fill_Fx(Fx, cx, nx, a, b);
+        fill_Fy(Fy, cy, ny, c, d);
+    }
     change_func();
-    interpolation_tensor(T, Fx, F, Fy, nx, ny);
-    Fill_TT(Fx, nx, T,Fy,ny, TT);
+    interpolation_tensor(T, Fx, F, Fy, nx, ny, nthreads);
+    Fill_TT(Fx, nx, T,Fy,ny, TT, nthreads);
     extrema_hunt();
     print_console();
     return 0;
@@ -136,7 +147,7 @@ void MyGLWidget::change_func(){
             f=f7;
             break;
     }
-    Fill_F(F, nx, ny, cx, cy, f);
+    Fill_F(F, nx, ny, cx, cy, f, nthreads);
     max_z=max_matr(F,nx,ny);
     min_z=min_matr(F,nx,ny);
     absmax=max(fabs(max_z),fabs(min_z));
@@ -238,15 +249,20 @@ void MyGLWidget::err_graph(){
 
 void MyGLWidget::press0(){
     change_func();
-    interpolation_tensor(T, Fx, F, Fy, nx, ny);
-    Fill_TT(Fx, nx, T,Fy,ny, TT);
+    interpolation_tensor(T, Fx, F, Fy, nx, ny, nthreads);
+    Fill_TT(Fx, nx, T,Fy,ny, TT, nthreads);
 }
 
 void MyGLWidget::press23(){
     chebyshevpoints(cx, cy, nx, ny, a, b, c, d);
-    fill_Fx(Fx, cx, nx, a, b);
-    fill_Fy(Fy, cy, ny, c, d);
-    Fill_F(F, nx, ny, cx, cy, f);
+    if (nthreads > 1){
+        fill_Fx_Fy(Fx, cx, nx, a, b, Fy, cy, ny, c, d);
+    }
+    else {
+        fill_Fx(Fx, cx, nx, a, b);
+        fill_Fy(Fy, cy, ny, c, d);
+    }
+    Fill_F(F, nx, ny, cx, cy, f, nthreads);
     max_z=max_matr(F,nx,ny);
     min_z=min_matr(F,nx,ny);
     absmax=max(fabs(max_z),fabs(min_z));
@@ -257,16 +273,21 @@ void MyGLWidget::press23(){
         if(F[(ny+2)*(nx/2+1)+ny/2+1]<min_z)
             min_z=F[(ny+2)*(nx/2+1)+ny/2+1];
     }
-    interpolation_tensor(T, Fx, F, Fy, nx, ny);
-    Fill_TT(Fx, nx, T,Fy,ny, TT);
+    interpolation_tensor(T, Fx, F, Fy, nx, ny, nthreads);
+    Fill_TT(Fx, nx, T,Fy,ny, TT, nthreads);
 }
 
 void MyGLWidget::press45(){
     allocate();
     chebyshevpoints(cx, cy, nx, ny, a, b, c, d);
-    fill_Fx(Fx, cx, nx, a, b);
-    fill_Fy(Fy, cy, ny, c, d);
-    Fill_F(F, nx, ny, cx, cy, f);
+    if (nthreads > 1){
+        fill_Fx_Fy(Fx, cx, nx, a, b, Fy, cy, ny, c, d);
+    }
+    else {
+        fill_Fx(Fx, cx, nx, a, b);
+        fill_Fy(Fy, cy, ny, c, d);
+    }
+    Fill_F(F, nx, ny, cx, cy, f, nthreads);
     if(p){
         F[(ny+2)*(nx/2+1)+ny/2+1]+=(0.1*absmax*p);
         if(F[(ny+2)*(nx/2+1)+ny/2+1]>max_z)
@@ -274,8 +295,8 @@ void MyGLWidget::press45(){
         if(F[(ny+2)*(nx/2+1)+ny/2+1]<min_z)
             min_z=F[(ny+2)*(nx/2+1)+ny/2+1];
     }
-    interpolation_tensor(T, Fx, F, Fy, nx, ny);
-    Fill_TT(Fx, nx, T,Fy,ny, TT);
+    interpolation_tensor(T, Fx, F, Fy, nx, ny, nthreads);
+    Fill_TT(Fx, nx, T,Fy,ny, TT, nthreads);
 }
 
 void MyGLWidget::press67(){
@@ -283,8 +304,8 @@ void MyGLWidget::press67(){
         max_z=F[(ny+2)*(nx/2+1)+ny/2+1];
     if(F[(ny+2)*(nx/2+1)+ny/2+1]<min_z)
         min_z=F[(ny+2)*(nx/2+1)+ny/2+1];
-    interpolation_tensor(T, Fx, F, Fy, nx, ny);
-    Fill_TT(Fx, nx, T,Fy,ny, TT);
+    interpolation_tensor(T, Fx, F, Fy, nx, ny, nthreads);
+    Fill_TT(Fx, nx, T,Fy,ny, TT, nthreads);
 }
 
 void MyGLWidget::printwindow(){

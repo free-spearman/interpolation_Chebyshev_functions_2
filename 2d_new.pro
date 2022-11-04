@@ -2,6 +2,8 @@ QT       += core gui
 
 QT += opengl
 LIBS += -lGLU
+LIBS += -lpthread
+
 #win32:LIBS += -lOpenGL32 -lglu32
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
@@ -17,13 +19,15 @@ SOURCES += \
     help.cpp \
     main.cpp \
     mainwindow.cpp \
-    myglwidget.cpp
+    myglwidget.cpp \
+    auto_parallelization.cpp 
 
 HEADERS += \
     chebyshev.hpp \
     help.hpp \
     mainwindow.h \
-    myglwidget.h
+    myglwidget.h \
+    auto_parallelization.hpp
 
 FORMS += \
     mainwindow.ui

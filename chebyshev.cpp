@@ -1,5 +1,5 @@
 #include "chebyshev.hpp"
-
+#include "auto_parallelization.hpp"
 #define PI 3.1415926535897932384626433832795
 
 void chebyshevpoints(double *cx, double *cy, int nx, int ny, double a, double b, double c, double d){
@@ -37,7 +37,21 @@ void chebyshevpoints(double *cx, double *cy, int nx, int ny, double a, double b,
     }
 }
 
-void Fill_F(double *F, int nx, int ny, double *cx, double *cy, double (*f)(double, double)){
+
+void Fill_F(double *F, int nx, int ny, double *cx, double *cy, double (*f)(double, double), size_t nthreads){
+    if (nthreads > 1){
+        Fill_F_arg arg;
+        arg.F = F; arg.cx = cx; arg.cy = cy;
+        arg.nx = nx; arg.ny = ny;
+        arg.f = f; 
+        auto_parallelization((void*) &arg,
+        nthreads,
+        nx+1+1,
+        pf_Fill_F
+        );
+        return ;
+    }
+        
     for(int i=0;i<=nx+1;++i){
         for(int j=0;j<=ny+1;++j){
             F[i*(ny+2)+j]=f(cx[i], cy[j]);
@@ -184,7 +198,21 @@ double scalar_bd(int nx, double *T, int ny){
     return res;
 }
 
-void interpolation_tensor(double *T, double *Fx, double *F, double *Fy, int nx, int ny){
+void interpolation_tensor(double *T, double *Fx, double *F, double *Fy, int nx, int ny, size_t nthreads){
+    if (nthreads > 1){
+        itensor_arg arg;
+        
+        arg.nx = nx; arg.ny = ny;
+        arg.T = T; arg.Fx = Fx;
+        arg.F = F; arg.Fy = Fy;
+
+        auto_parallelization((void*) &arg,
+            nthreads,
+            nx,
+            pf_interpolation_tensor
+        );
+        return ;
+    }
     for(int i=0; i<nx; ++i){
         for(int j=0; j<ny; ++j){
             T[i*ny+j]=fscalar_ij(i, nx, Fx, F, Fy, ny, j);
@@ -192,22 +220,50 @@ void interpolation_tensor(double *T, double *Fx, double *F, double *Fy, int nx, 
     }
 }
 
-void Fill_TT(double *Fx, int nx, double *T, double *Fy, int ny, double *TT){
-    for(int i=0;i<nx;++i){
+void Fill_TT(double *Fx, int nx, double *T, double *Fy, int ny, double *TT, size_t nthreads){
+    if ( nthreads > 1){
+        TT_arg arg;
+        arg.Fx = Fx; arg.nx = nx; arg.T = T;
+        arg.Fy = Fy; arg.ny = ny; arg.TT = TT;
+        auto_parallelization((void*) &arg,
+            nthreads,
+            nx,
+            pf_TT_scalar_ij
+        );
+        auto_parallelization((void*) &arg,
+            nthreads,
+            ny,
+            pf_TT_scalar_aj_bj
+        );
+        auto_parallelization((void*) &arg,
+        nthreads,
+        nx,
+        pf_TT_scalar_ic_id
+        );
+    }
+    else {
+        
+        for(int i=0;i<nx;++i){
+            for(int j=0;j<ny;++j){
+                TT[(i+1)*(ny+2)+j+1]=scalar_ij(i, nx, Fx, T, Fy, ny, j);
+            }
+        } 
+    
         for(int j=0;j<ny;++j){
-            TT[(i+1)*(ny+2)+j+1]=scalar_ij(i, nx, Fx, T, Fy, ny, j);
+            TT[j+1]=scalar_aj(nx, T, Fy, ny, j);
+            TT[(nx+1)*(ny+2)+j+1]=scalar_bj(nx, T, Fy, ny, j);
         }
+    
+        for(int i=0;i<nx;++i){
+            TT[(i+1)*(ny+2)]=scalar_ic(i, nx, Fx, T, ny);
+            TT[(i+1)*(ny+2)+ny+1]=scalar_id(i, nx, Fx, T, ny);
+        }
+
     }
-    for(int j=0;j<ny;++j){
-        TT[j+1]=scalar_aj(nx, T, Fy, ny, j);
-        TT[(nx+1)*(ny+2)+j+1]=scalar_bj(nx, T, Fy, ny, j);
-    }
-    for(int i=0;i<nx;++i){
-        TT[(i+1)*(ny+2)]=scalar_ic(i, nx, Fx, T, ny);
-        TT[(i+1)*(ny+2)+ny+1]=scalar_id(i, nx, Fx, T, ny);
-    }
+        
     TT[0]=scalar_ac(nx, T, ny);
     TT[ny+1]=scalar_ad(nx, T, ny);
     TT[(nx+1)*(ny+2)]=scalar_bc(nx, T, ny);
     TT[(nx+2)*(ny+2)-1]=scalar_bd(nx, T, ny);
 }
+
